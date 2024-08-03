@@ -1,0 +1,49 @@
+
+syntax = "proto3";
+
+package ipc;
+
+option java_multiple_files = true;
+option java_package = "com.repcomm.sneknet.protos";
+option java_outer_classname = "IPC";
+option go_package = "common/protos";
+
+message IPv4Info {
+  int32 SrcIPv4 = 1;
+  int32 DstIPv4 = 2;
+}
+
+message IPv4TcpMsg {
+  int32 SrcPort = 1;
+  int32 DstPort = 2;
+  IPv4Info IPv4 = 3;
+  bool IsSyn = 4;
+  bool IsAck = 5;
+  uint32 SeqId = 6;
+  bytes Payload = 7;
+}
+
+message IPv4UdpMsg {
+  int32 SrcPort = 1;
+  int32 DstPort = 2;
+  IPv4Info IPv4 = 3;
+  bytes Payload = 4;
+}
+
+message IpcMsg {
+  int32 TransactionId = 1;
+  /**when true, TransactionId is the same as request TransactionId*/
+  optional bool IsResponse = 2;
+
+  /**whether a transaction was successful*/
+  optional bool IsSuccess = 3;
+
+  /**when IsSuccess = false, the error message*/
+  optional string Error = 4;
+
+  oneof payload {
+    IPv4TcpMsg IPv4Tcp = 5;
+    IPv4UdpMsg IPv4Udp = 6;
+  }
+
+}
