@@ -65,16 +65,17 @@ public class BridgeService extends Service {
       logExceptionMsg(ex);
       return;
     }
-    logOutputMsg("BRIDGE: client connection");
+    logOutputMsg("BRIDGE: connection");
   }
   
-  void handleRead(SelectionKey k) throws Exception {
+  /**Returns true when disconnect detected*/
+  boolean handleRead(SelectionKey k) throws Exception {
     SocketChannel client = (SocketChannel)k.channel();
     
     int rc = client.read(readBuffer);
     
     if (rc == -1) {
-      throw new Exception("Socket EOF, client disconnect");
+      return true;
     }
     readBuffer.flip();
     
@@ -84,13 +85,14 @@ public class BridgeService extends Service {
     } catch (Exception ex) {
       System.err.println(ex.toString());
       logExceptionMsg(ex);
-      return;
+      return false;
     }
     switch (m.getPayloadCase()) {
       case IPV4TCP:
         TcpTap.Handle(m.getIPv4Tcp());
         break;
     }
+    return false;
   }
   
   @Override
@@ -108,7 +110,7 @@ public class BridgeService extends Service {
     }
     startForeground(1, notification);
     
-    readBuffer = ByteBuffer.allocate(2048);
+    readBuffer = ByteBuffer.allocate(4096);
     st = new Thread(()->{
       
       Selector selector;
@@ -143,11 +145,17 @@ public class BridgeService extends Service {
           if (k.isAcceptable()) {
             handleAccept(selector, ch, k);
           } else if (k.isReadable()) {
+            boolean disconnect = false;
             try {
-              handleRead(k);
+              disconnect = handleRead(k);
             } catch (Exception e) {
               logExceptionMsg(e);
               k.cancel();
+              continue;
+            }
+            if (disconnect) {
+              k.cancel();
+              logOutputMsg("BRIDGE: disconnected");
               continue;
             }
           }

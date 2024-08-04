@@ -13,7 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TcpTap {
-  static List<NIOTcpClient> tcps = new ArrayList();
+  private static final Object writeLock = new Object();
+  static List<EZTcp> tcps = new ArrayList();
   
   public static void Handle(IPv4TcpMsg m) {
     int srcPort = m.getSrcPort();
@@ -45,31 +46,32 @@ public class TcpTap {
         System.out.print("connecting to ");
         System.out.println(dst);
         
-        //create a TCP client
-//        NIOTcpClient c = new NIOTcpClient() {
-//          @Override
-//          protected void onRead(ByteBuffer buf) throws Exception {
-//
-//          }
-//
-//          @Override
-//          protected void onConnected() throws Exception {
-//
-//          }
-//
-//          @Override
-//          protected void onDisconnected() {
-//
-//          }
-//        };
-//
-//        c.setAddress(dst);
-//        tcps.add(c);
-//        try {
-//          c.start();
-//        } catch (IOException e) {
-//          System.err.println(e.toString());
-//        }
+        final EZTcp c = new EZTcp();
+        EZTcp.Callbacks cbs = new EZTcp.Callbacks() {
+          @Override
+          public void onConnect(EZTcp c) {
+            synchronized (writeLock) {
+              tcps.add(c);
+            }
+          }
+          @Override
+          public void onDisconnect(EZTcp c) {
+            synchronized (writeLock) {
+              tcps.remove(c);
+            }
+          }
+          @Override
+          public void onException(EZTcp c, Exception e) {
+          
+          }
+          @Override
+          public void onRead(EZTcp c, byte[] data, int readsize) {
+            synchronized (writeLock) {
+            
+            }
+          }
+        };
+        c.connect(dst, cbs);
       }
     } else { //INIT(3) client -> server
       System.out.printf(

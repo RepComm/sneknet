@@ -11,8 +11,9 @@ import (
 	"sneknet/common"
 	"time"
 
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
+	"github.com/gopacket/gopacket"
+	"github.com/gopacket/gopacket/layers"
+
 	"github.com/songgao/packets/ethernet"
 )
 
@@ -118,6 +119,7 @@ func main() {
 		&pICMPv4,
 	)
 	autoPacketParser.IgnorePanic = true
+	autoPacketParser.IgnoreUnsupported = true
 
 	decoded := []gopacket.LayerType{}
 
@@ -127,13 +129,75 @@ func main() {
 		//try to decode into our specific layers of interest
 		decodeErr := autoPacketParser.DecodeLayers(frame, &decoded)
 		if decodeErr != nil {
-			// log.Println("DECODE: error, skipping:", decodeErr)
+			log.Println("DECODE: error, skipping:",
+				decodeErr,
+			)
+			packet := gopacket.NewPacket(frame,
+				layers.LayerTypeEthernet,
+				gopacket.Default,
+			)
+			for _, layer := range packet.Layers() {
+				fmt.Println("PACKET LAYER:", layer.LayerType())
+			}
 			return
 		}
 
 		for _, layerType := range decoded {
 			switch layerType {
 			case layers.LayerTypeICMPv4:
+				tc := pICMPv4.TypeCode
+				if tc.Type() == layers.ICMPv4TypeEchoRequest &&
+					bytes.Equal(pIPv4.DstIP, gatewayStaticIpv4Bin) {
+
+					log.Println("ICMP: host -> gateway (sneknet)")
+
+					rICMPv4 := &layers.ICMPv4{
+						TypeCode: layers.CreateICMPv4TypeCode(
+							layers.ICMPv4TypeEchoReply,
+							tc.Code(),
+						),
+						Id:  pICMPv4.Id,
+						Seq: pICMPv4.Seq,
+					}
+
+					//BUG - https://github.com/google/gopacket/issues/752
+					//payload does not get sent..
+					rICMPv4.Payload = pICMPv4.Payload
+
+					resBuffer := gopacket.NewSerializeBuffer()
+					err := gopacket.SerializeLayers(
+						resBuffer, gopacket.SerializeOptions{
+							ComputeChecksums: true,
+							FixLengths:       true,
+						},
+						&layers.Ethernet{
+							SrcMAC:       gatewayMac,
+							DstMAC:       pEth.SrcMAC,
+							EthernetType: layers.EthernetTypeIPv4,
+						},
+						&layers.IPv4{
+							SrcIP:    gatewayStaticIpv4Bin,
+							DstIP:    pIPv4.SrcIP,
+							Version:  pIPv4.Version,
+							IHL:      pIPv4.IHL,
+							Length:   0, //calculated later
+							TTL:      64,
+							Protocol: layers.IPProtocolICMPv4,
+						},
+						rICMPv4,
+					)
+					if err != nil {
+						log.Println("ICMP: failed gateway reply serialization", err)
+						return
+					}
+
+					_, err = iface.Write(resBuffer.Bytes())
+					if err != nil {
+						log.Println("ICMP: failed gateway reply send", err)
+						return
+					}
+					return
+				}
 				bridge.HandleICMPv4(&pIPv4, &pICMPv4)
 			case layers.LayerTypeTCP:
 				bridge.HandleTCP(&pIPv4, &pTCP)
@@ -192,6 +256,8 @@ func main() {
 					hex.EncodeToString(reqArpP.SourceHwAddress),
 				)
 				return
+			case layers.LayerTypeUDP:
+				log.Println("UDP")
 			}
 		}
 

@@ -9,7 +9,7 @@ import (
 	"os"
 	"sneknet/common/protos"
 
-	"github.com/google/gopacket/layers"
+	"github.com/gopacket/gopacket/layers"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -143,6 +143,7 @@ func (b *Bridge) HandleTCP(pIPv4 *layers.IPv4, pTCP *layers.TCP) {
 
 func (b *Bridge) HandleICMPv4(pIPv4 *layers.IPv4, pICMPv4 *layers.ICMPv4) {
 	icmpType := pICMPv4.TypeCode.Type()
+
 	switch icmpType {
 	case layers.ICMPv4TypeEchoRequest:
 		log.Printf("ICMP: ping req %s -> %s", pIPv4.SrcIP, pIPv4.DstIP)
