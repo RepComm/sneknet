@@ -159,9 +159,6 @@ func main() {
 						Id:  pICMPv4.Id,
 						Seq: pICMPv4.Seq,
 					}
-
-					//BUG - https://github.com/google/gopacket/issues/752
-					//payload does not get sent..
 					rICMPv4.Payload = pICMPv4.Payload
 
 					resBuffer := gopacket.NewSerializeBuffer()

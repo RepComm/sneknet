@@ -1,8 +1,6 @@
 package com.repcomm.sneknet;
 
-import static com.repcomm.sneknet.Utils.BBReadIPv4;
-import static com.repcomm.sneknet.Utils.BBReadUint16;
-import static com.repcomm.sneknet.Utils.BBReadUint64;
+import static com.repcomm.sneknet.Utils.BAReadUint32;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -41,7 +39,8 @@ public class BridgeService extends Service {
   
 //  ServerSocket ss;
   Thread st;
-  ByteBuffer readBuffer;
+  byte[] prefixBuffer;
+  byte[] readBuffer;
   
   @Override
   public IBinder onBind(Intent intent) {
@@ -67,17 +66,42 @@ public class BridgeService extends Service {
     }
     logOutputMsg("BRIDGE: connection");
   }
+  /**Returns true when disconnect detected*/
+  public static boolean readN(SocketChannel socketChannel, int n, byte[] output) throws IOException {
+    int totalBytesRead = 0;
+    final int MIN_BUFFER_SIZE = 256;
+    
+    while (totalBytesRead < n) {
+      ByteBuffer buffer = ByteBuffer.allocate(Math.min(n - totalBytesRead, MIN_BUFFER_SIZE));
+      int bytesRead = socketChannel.read(buffer);
+      if (bytesRead == -1) {
+        return true;
+      }
+      buffer.flip();
+      buffer.get(output, totalBytesRead, bytesRead);
+      totalBytesRead += bytesRead;
+    }
+    return false;
+  }
   
   /**Returns true when disconnect detected*/
   boolean handleRead(SelectionKey k) throws Exception {
     SocketChannel client = (SocketChannel)k.channel();
     
-    int rc = client.read(readBuffer);
-    
-    if (rc == -1) {
-      return true;
+    if (readN(client, 4, prefixBuffer)) {
+      return true; //client disconnect
     }
-    readBuffer.flip();
+    int dataLen = BAReadUint32(prefixBuffer);
+    
+//    if (readBuffer.length < dataLen) {
+      readBuffer = new byte[dataLen];
+//    }
+    if (readN(client, dataLen, readBuffer)) {
+      readBuffer = null;
+      return true; //client disconnect
+    }
+    
+//    logOutputMsg("read " + (dataLen + 4) + " bytes");
     
     IpcMsg m;
     try {
@@ -110,7 +134,8 @@ public class BridgeService extends Service {
     }
     startForeground(1, notification);
     
-    readBuffer = ByteBuffer.allocate(4096);
+//    readBuffer = ByteBuffer.allocate(4096);
+    prefixBuffer = new byte[4];
     st = new Thread(()->{
       
       Selector selector;

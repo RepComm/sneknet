@@ -51,5 +51,16 @@ public class Utils {
       ((long) B <<  8) +
       (long)  A;
   }
+  public static int BAReadUint32(byte[] b) {
+    byte A = b[0];
+    byte B = b[1];
+    byte C = b[2];
+    byte D = b[3];
+    return
+      ((int) D << 24) +
+      ((int) C << 16) +
+      ((int) B <<  8) +
+      (int)  A;
+  }
   
 }

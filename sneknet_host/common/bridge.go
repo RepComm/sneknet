@@ -11,6 +11,7 @@ import (
 
 	"github.com/gopacket/gopacket/layers"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type Bridge struct {
@@ -61,9 +62,24 @@ func (b *Bridge) Start() error {
 	return nil
 }
 
-func (b *Bridge) Write(data []byte) (n int, err error) {
-	// fmt.Fprintf(conn, "Hello UDP on android, whats up?")
+/**Writes data to bridge, but with a uint32 prefix for payload size*/
+func (b *Bridge) WritePrefixedBuffer(data []byte) (n int, err error) {
+	dataLen := len(data)
+	prefixLen := 4
+
+	prefix := make([]byte, prefixLen)
+
+	binary.LittleEndian.PutUint32(prefix, uint32(dataLen))
+	b.conn.Write(prefix) //write a prefix so java can anticipate alloc size
 	return b.conn.Write(data)
+}
+func (b *Bridge) WriteProto(m protoreflect.ProtoMessage) (err error) {
+	buf, err := proto.Marshal(m)
+	if err != nil {
+		return err
+	}
+	_, err = b.WritePrefixedBuffer(buf)
+	return err
 }
 
 func (b *Bridge) ReadLoop() {
@@ -132,13 +148,12 @@ func (b *Bridge) HandleTCP(pIPv4 *layers.IPv4, pTCP *layers.TCP) {
 		},
 	}
 
-	log.Println("TCP", pTCP.SrcPort, pTCP.DstPort, pTCP.SYN, pTCP.ACK)
+	log.Println("TCP: ->", pIPv4.DstIP, pTCP.DstPort)
 
-	buf, err := proto.Marshal(ipcMsg)
+	err := b.WriteProto(ipcMsg)
 	if err != nil {
 		fmt.Println(err)
 	}
-	b.Write(buf)
 }
 
 func (b *Bridge) HandleICMPv4(pIPv4 *layers.IPv4, pICMPv4 *layers.ICMPv4) {
