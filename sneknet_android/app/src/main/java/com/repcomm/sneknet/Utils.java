@@ -2,7 +2,9 @@ package com.repcomm.sneknet;
 
 import android.annotation.SuppressLint;
 import android.app.ActivityManager;
+import android.app.PendingIntent;
 import android.content.Context;
+import android.content.Intent;
 
 import java.nio.ByteBuffer;
 
@@ -73,6 +75,20 @@ public class Utils {
       }
     }
     return false;
+  }
+  
+  public static PendingIntent ServiceUpdateIntentAction(Context ctx, Class<?> serviceClass, String action, String data, int requestCode) {
+    Intent intent = new Intent(ctx, serviceClass);
+    intent.setAction(action);
+    if (data != null) {
+      intent.putExtra("data", data);
+    }
+    PendingIntent result = PendingIntent.getService(
+      ctx, requestCode,
+      intent,
+      PendingIntent.FLAG_IMMUTABLE
+    );
+    return result;
   }
   
 }

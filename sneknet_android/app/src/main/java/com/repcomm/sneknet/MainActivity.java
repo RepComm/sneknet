@@ -97,6 +97,19 @@ public class MainActivity extends AppCompatActivity {
         case "bridge_state":
           if (data != null) {
             //update the switch even when other services/activities modify the bridge state
+            switch (data) {
+              case "start":
+              case "started":
+                swBridge.setChecked(true);
+                break;
+              case "stop":
+              case "stopped":
+                swBridge.setChecked(false);
+                break;
+              case "exit":
+                finish();
+                break;
+            }
             swBridge.setChecked(
               data.equals("start") ||
               data.equals("started")

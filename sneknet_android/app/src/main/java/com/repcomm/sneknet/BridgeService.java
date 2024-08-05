@@ -1,6 +1,7 @@
 package com.repcomm.sneknet;
 
 import static com.repcomm.sneknet.Utils.BAReadUint32;
+import static com.repcomm.sneknet.Utils.ServiceUpdateIntentAction;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -10,6 +11,8 @@ import android.content.BroadcastReceiver;
 import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
+import android.widget.RemoteViews;
+
 import com.repcomm.sneknet.protos.IpcMsg;
 
 import java.io.IOException;
@@ -174,6 +177,19 @@ public class BridgeService extends Service {
   
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
+    if (intent != null) {
+      String action = intent.getAction();
+      if (action != null) {
+        String data = intent.getStringExtra("data");
+        if (data != null) {
+          if (action.equals("bridge_state")) {
+            EZAction.FireData(this, "bridge_state", data);
+            logOutputMsg("BRIDGE: update bridge state: " + data);
+            return START_STICKY;
+          }
+        }
+      }
+    }
     //setup bridge thread
     prefixBuffer = new byte[4];
     
@@ -202,24 +218,35 @@ public class BridgeService extends Service {
           this,
           "bridge_state",
           st == null ? "stopped" : "started");
+      } else if (data.equals("exit")) {
+        stopSelf();
       }
     }, new String[]{
       "bridge_state",
     }, this);
+    
+    RemoteViews notificationLayout = new RemoteViews(getPackageName(), R.layout.notification_menu);
+    
+    notificationLayout.setOnClickPendingIntent(R.id.n_exit, ServiceUpdateIntentAction(this, BridgeService.class, "bridge_state", "exit", 1));
+    notificationLayout.setOnClickPendingIntent(R.id.n_start, ServiceUpdateIntentAction(this, BridgeService.class, "bridge_state", "start", 2));
+    notificationLayout.setOnClickPendingIntent(R.id.n_stop, ServiceUpdateIntentAction(this, BridgeService.class, "bridge_state", "stop", 3));
     
     createNotificationChannel();
     Notification notification = null;
     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
       notification = new Notification.Builder(this, CHANNEL_ID)
         .setContentTitle("sneknet")
-            .setContentText("running")
-            .setSmallIcon(R.drawable.power_off_foreground)
-            .build();
+        .setContentText("running")
+        .setSmallIcon(R.mipmap.ic_launcher)
+        .setCustomBigContentView(notificationLayout)
+        .build();
     }
     startForeground(1, notification);
     
     return START_STICKY;
   }
+  
+  
   
   @Override
   public void onDestroy() {
