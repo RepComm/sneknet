@@ -6,32 +6,21 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
-
-import androidx.core.app.ServiceCompat;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
-
-import com.repcomm.sneknet.protos.IPC;
-import com.repcomm.sneknet.protos.IPv4TcpMsg;
 import com.repcomm.sneknet.protos.IpcMsg;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
-import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 public class BridgeService extends Service {
@@ -48,10 +37,10 @@ public class BridgeService extends Service {
   }
   
   public void logExceptionMsg(Exception e) {
-    BS.send("exception", e.toString());
+    EZAction.FireData(this, "exception", e.toString());
   }
   public void logOutputMsg(String msg) {
-    BS.send("output", msg);
+    EZAction.FireData(this, "output", msg);
   }
   
   void handleAccept(Selector selector, ServerSocketChannel ch, SelectionKey k) {
@@ -101,7 +90,7 @@ public class BridgeService extends Service {
       return true; //client disconnect
     }
     
-//    logOutputMsg("read " + (dataLen + 4) + " bytes");
+    logOutputMsg("read " + (dataLen + 4) + " bytes");
     
     IpcMsg m;
     try {
@@ -119,23 +108,9 @@ public class BridgeService extends Service {
     return false;
   }
   
-  @Override
-  public int onStartCommand(Intent intent, int flags, int startId) {
-    logOutputMsg("BRIDGE: started service");
-    
-    createNotificationChannel();
-    Notification notification = null;
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-      notification = new Notification.Builder(this, CHANNEL_ID)
-        .setContentTitle("sneknet bridge")
-            .setContentText("running")
-            .setSmallIcon(R.drawable.ic_launcher_background)
-            .build();
-    }
-    startForeground(1, notification);
-    
-//    readBuffer = ByteBuffer.allocate(4096);
-    prefixBuffer = new byte[4];
+  BroadcastReceiver bridgeListener;
+  
+  void setupBridgeThread() {
     st = new Thread(()->{
       
       Selector selector;
@@ -195,16 +170,62 @@ public class BridgeService extends Service {
         logExceptionMsg(e);
       }
     });
+  }
+  
+  @Override
+  public int onStartCommand(Intent intent, int flags, int startId) {
+    //setup bridge thread
+    prefixBuffer = new byte[4];
     
-    logOutputMsg("BRIDGE: starting bridge thread");
-    st.start();
-    logOutputMsg("BRIDGE: started bridge thread");
+    //listen to bridge start/stop requests
+    bridgeListener = EZAction.Listen((String action, String data)->{
+      if (data == null) return;
+      if (data.equals("start")) {
+        if (st == null) {
+          setupBridgeThread();
+          st.start();
+          logOutputMsg("BRIDGE: started service");
+        } else {
+          logOutputMsg("BRIDGE: already started");
+        }
+      } else if (data.equals("stop")) {
+        if (st == null) {
+          logOutputMsg("BRIDGE: already stopped");
+        } else {
+          st.interrupt();
+          logOutputMsg("BRIDGE: stopped service");
+          st = null;
+        }
+      } else if(data.equals("get")) {
+        //respond to get state requests
+        EZAction.FireData(
+          this,
+          "bridge_state",
+          st == null ? "stopped" : "started");
+      }
+    }, new String[]{
+      "bridge_state",
+    }, this);
+    
+    createNotificationChannel();
+    Notification notification = null;
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+      notification = new Notification.Builder(this, CHANNEL_ID)
+        .setContentTitle("sneknet")
+            .setContentText("running")
+            .setSmallIcon(R.drawable.power_off_foreground)
+            .build();
+    }
+    startForeground(1, notification);
     
     return START_STICKY;
   }
   
   @Override
   public void onDestroy() {
+    EZAction.Deafen(bridgeListener, this);
+    bridgeListener = null;
+    
     if (st != null) {
       
       st.interrupt();

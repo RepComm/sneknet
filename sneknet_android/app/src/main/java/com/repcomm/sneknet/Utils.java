@@ -1,6 +1,8 @@
 package com.repcomm.sneknet;
 
 import android.annotation.SuppressLint;
+import android.app.ActivityManager;
+import android.content.Context;
 
 import java.nio.ByteBuffer;
 
@@ -61,6 +63,16 @@ public class Utils {
       ((int) C << 16) +
       ((int) B <<  8) +
       (int)  A;
+  }
+  
+  public static boolean IsServiceRunning(Context ctx, Class<?> serviceClass) {
+    ActivityManager manager = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
+    for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+      if (serviceClass.getName().equals(service.service.getClassName())) {
+        return true;
+      }
+    }
+    return false;
   }
   
 }
